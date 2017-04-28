@@ -9,6 +9,7 @@
  */
 'use strict';
 
+import type {GlobalConfig} from 'types/Config';
 import type {Context} from 'types/Context';
 
 const ansiEscapes = require('ansi-escapes');
@@ -31,6 +32,7 @@ const {KEYS, CLEAR} = require('./constants');
 let hasExitListener = false;
 
 const watch = (
+  initialGlobalConfig: GlobalConfig,
   contexts: Array<Context>,
   argv: Object,
   pipe: stream$Writable | tty$WriteStream,
@@ -61,7 +63,11 @@ const watch = (
   hasteMapInstances.forEach((hasteMapInstance, index) => {
     hasteMapInstance.on('change', ({eventsQueue, hasteFS, moduleMap}) => {
       const validPaths = eventsQueue.filter(({filePath}) => {
-        return isValidPath(contexts[index].config, filePath);
+        return isValidPath(
+          initialGlobalConfig,
+          contexts[index].config,
+          filePath,
+        );
       });
 
       if (validPaths.length) {
@@ -103,39 +109,40 @@ const watch = (
     isInteractive && pipe.write(CLEAR);
     preRunMessage.print(pipe);
     isRunning = true;
-    contexts.forEach(context => {
+    const globalConfig = Object.freeze(
+      Object.assign({}, initialGlobalConfig, overrideConfig, {
+        testNamePattern: argv.testNamePattern,
+        testPathPattern: argv.testPathPattern,
+      }),
+    );
+    return runJest(
       // $FlowFixMe
-      context.config = Object.freeze(
-        // $FlowFixMe
-        Object.assign(
-          {
-            testNamePattern: argv.testNamePattern,
-            testPathPattern: argv.testPathPattern,
-          },
-          context.config,
-          overrideConfig,
-        ),
-      );
-    });
-    return runJest(contexts, argv, pipe, testWatcher, startRun, results => {
-      isRunning = false;
-      hasSnapshotFailure = !!results.snapshot.failure;
-      // Create a new testWatcher instance so that re-runs won't be blocked.
-      // The old instance that was passed to Jest will still be interrupted
-      // and prevent test runs from the previous run.
-      testWatcher = new TestWatcher({isWatchMode: true});
-      if (shouldDisplayWatchUsage) {
-        pipe.write(usage(argv, hasSnapshotFailure));
-        shouldDisplayWatchUsage = false; // hide Watch Usage after first run
-        isWatchUsageDisplayed = true;
-      } else {
-        pipe.write(showToggleUsagePrompt());
-        shouldDisplayWatchUsage = false;
-        isWatchUsageDisplayed = false;
-      }
+      globalConfig,
+      contexts,
+      argv,
+      pipe,
+      testWatcher,
+      startRun,
+      results => {
+        isRunning = false;
+        hasSnapshotFailure = !!results.snapshot.failure;
+        // Create a new testWatcher instance so that re-runs won't be blocked.
+        // The old instance that was passed to Jest will still be interrupted
+        // and prevent test runs from the previous run.
+        testWatcher = new TestWatcher({isWatchMode: true});
+        if (shouldDisplayWatchUsage) {
+          pipe.write(usage(argv, hasSnapshotFailure));
+          shouldDisplayWatchUsage = false; // hide Watch Usage after first run
+          isWatchUsageDisplayed = true;
+        } else {
+          pipe.write(showToggleUsagePrompt());
+          shouldDisplayWatchUsage = false;
+          isWatchUsageDisplayed = false;
+        }
 
-      testNamePatternPrompt.updateCachedTestResults(results.testResults);
-    }).catch(error => console.error(chalk.red(error.stack)));
+        testNamePatternPrompt.updateCachedTestResults(results.testResults);
+      },
+    ).catch(error => console.error(chalk.red(error.stack)));
   };
 
   const onKeypress = (key: string) => {
@@ -176,6 +183,13 @@ const watch = (
         });
         startRun();
         break;
+      case KEYS.C:
+        setState(argv, 'watch', {
+          testNamePattern: '',
+          testPathPattern: '',
+        });
+        startRun();
+        break;
       case KEYS.O:
         setState(argv, 'watch', {
           testNamePattern: '',
@@ -184,24 +198,32 @@ const watch = (
         startRun();
         break;
       case KEYS.P:
-        testPathPatternPrompt.run(testPathPattern => {
-          setState(argv, 'watch', {
-            testNamePattern: '',
-            testPathPattern,
-          });
+        testPathPatternPrompt.run(
+          testPathPattern => {
+            setState(argv, 'watch', {
+              testNamePattern: '',
+              testPathPattern,
+            });
 
-          startRun();
-        }, onCancelPatternPrompt);
+            startRun();
+          },
+          onCancelPatternPrompt,
+          {header: activeFilters(argv)},
+        );
         break;
       case KEYS.T:
-        testNamePatternPrompt.run(testNamePattern => {
-          setState(argv, 'watch', {
-            testNamePattern,
-            testPathPattern: '',
-          });
+        testNamePatternPrompt.run(
+          testNamePattern => {
+            setState(argv, 'watch', {
+              testNamePattern,
+              testPathPattern: argv.testPathPattern,
+            });
 
-          startRun();
-        }, onCancelPatternPrompt);
+            startRun();
+          },
+          onCancelPatternPrompt,
+          {header: activeFilters(argv)},
+        );
         break;
       case KEYS.QUESTION_MARK:
         break;
@@ -235,9 +257,34 @@ const watch = (
   return Promise.resolve();
 };
 
+const activeFilters = (argv, delimiter = '\n') => {
+  const {testNamePattern, testPathPattern} = argv;
+  if (testNamePattern || testPathPattern) {
+    const filters = [
+      testPathPattern
+        ? chalk.dim('filename ') + chalk.yellow('/' + testPathPattern + '/')
+        : null,
+      testNamePattern
+        ? chalk.dim('test name ') + chalk.yellow('/' + testNamePattern + '/')
+        : null,
+    ]
+      .filter(f => !!f)
+      .join(', ');
+
+    const messages = ['\n' + chalk.bold('Active Filters: ') + filters];
+
+    return messages.filter(message => !!message).join(delimiter);
+  }
+
+  return '';
+};
+
 const usage = (argv, snapshotFailure, delimiter = '\n') => {
-  /* eslint-disable max-len */
   const messages = [
+    activeFilters(argv),
+    argv.testPathPattern || argv.testNamePattern
+      ? chalk.dim(' \u203A Press ') + 'c' + chalk.dim(' to clear filters.')
+      : null,
     '\n' + chalk.bold('Watch Usage'),
     argv.watch
       ? chalk.dim(' \u203A Press ') + 'a' + chalk.dim(' to run all tests.')
@@ -256,12 +303,15 @@ const usage = (argv, snapshotFailure, delimiter = '\n') => {
     chalk.dim(' \u203A Press ') +
       'p' +
       chalk.dim(' to filter by a filename regex pattern.'),
+    chalk.dim(' \u203A Press ') +
+      't' +
+      chalk.dim(' to filter by a test name regex pattern.'),
     chalk.dim(' \u203A Press ') + 'q' + chalk.dim(' to quit watch mode.'),
     chalk.dim(' \u203A Press ') +
       'Enter' +
       chalk.dim(' to trigger a test run.'),
   ];
-  /* eslint-enable max-len */
+
   return messages.filter(message => !!message).join(delimiter) + '\n';
 };
 

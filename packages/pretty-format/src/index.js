@@ -11,11 +11,18 @@
 
 'use strict';
 
-import type {Colors, Refs, StringOrNull, Plugins, Options} from './types.js';
+import type {
+  Colors,
+  Refs,
+  StringOrNull,
+  Plugins,
+  Options,
+} from 'types/PrettyFormat';
 
 const style = require('ansi-styles');
 
 type Theme = {|
+  comment?: string,
   content?: string,
   prop?: string,
   tag?: string,
@@ -43,7 +50,7 @@ const regExpToString = RegExp.prototype.toString;
 const symbolToString = Symbol.prototype.toString;
 
 const SYMBOL_REGEXP = /^Symbol\((.*)\)(.*)$/;
-const NEWLINE_REGEXP = /\n/ig;
+const NEWLINE_REGEXP = /\n/gi;
 
 const getSymbols = Object.getOwnPropertySymbols || (obj => []);
 
@@ -539,7 +546,10 @@ function printComplexValue(
   const hitMaxDepth = currentDepth > maxDepth;
 
   if (
-    callToJSON && !hitMaxDepth && val.toJSON && typeof val.toJSON === 'function'
+    callToJSON &&
+    !hitMaxDepth &&
+    val.toJSON &&
+    typeof val.toJSON === 'function'
   ) {
     return print(
       val.toJSON(),
@@ -790,6 +800,7 @@ const DEFAULTS: Options = {
   printFunctionName: true,
   spacing: '\n',
   theme: {
+    comment: 'gray',
     content: 'reset',
     prop: 'yellow',
     tag: 'cyan',
@@ -816,9 +827,9 @@ function normalizeOptions(opts: InitialOptions): Options {
 
   Object.keys(DEFAULTS).forEach(
     key =>
-      result[key] = opts.hasOwnProperty(key)
+      (result[key] = opts.hasOwnProperty(key)
         ? key === 'theme' ? normalizeTheme(opts.theme) : opts[key]
-        : DEFAULTS[key],
+        : DEFAULTS[key]),
   );
 
   if (result.min) {
@@ -864,7 +875,13 @@ function prettyFormat(val: any, initialOptions?: InitialOptions): string {
     opts = normalizeOptions(initialOptions);
   }
 
-  const colors: Colors = {};
+  const colors: Colors = {
+    comment: {close: '', open: ''},
+    content: {close: '', open: ''},
+    prop: {close: '', open: ''},
+    tag: {close: '', open: ''},
+    value: {close: '', open: ''},
+  };
   Object.keys(opts.theme).forEach(key => {
     if (opts.highlight) {
       const color = (colors[key] = style[opts.theme[key]]);
@@ -877,8 +894,6 @@ function prettyFormat(val: any, initialOptions?: InitialOptions): string {
           `pretty-format: Option "theme" has a key "${key}" whose value "${opts.theme[key]}" is undefined in ansi-styles.`,
         );
       }
-    } else {
-      colors[key] = {close: '', open: ''};
     }
   });
 
@@ -945,5 +960,14 @@ function prettyFormat(val: any, initialOptions?: InitialOptions): string {
     colors,
   );
 }
+
+prettyFormat.plugins = {
+  AsymmetricMatcher: require('./plugins/AsymmetricMatcher'),
+  ConvertAnsi: require('./plugins/ConvertAnsi'),
+  HTMLElement: require('./plugins/HTMLElement'),
+  Immutable: require('./plugins/ImmutablePlugins'),
+  ReactElement: require('./plugins/ReactElement'),
+  ReactTestComponent: require('./plugins/ReactTestComponent'),
+};
 
 module.exports = prettyFormat;

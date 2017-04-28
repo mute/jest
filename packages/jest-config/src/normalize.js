@@ -4,12 +4,13 @@
  * This source code is licensed under the BSD-style license found in the
  * LICENSE file in the root directory of this source tree. An additional grant
  * of patent rights can be found in the PATENTS file in the same directory.
+ *
  * @flow
  */
 
 'use strict';
 
-import type {InitialConfig} from 'types/Config';
+import type {InitialOptions} from 'types/Config';
 
 const {
   BULLET,
@@ -36,7 +37,7 @@ const ERROR = `${BULLET}Validation Error`;
 const createConfigError = message =>
   new ValidationError(ERROR, message, DOCUMENTATION_NOTE);
 
-const setupPreset = (config: InitialConfig, configPreset: string) => {
+const setupPreset = (config: InitialOptions, configPreset: string) => {
   let preset;
   const presetPath = _replaceRootDirInPath(config.rootDir, configPreset);
   const presetModule = Resolver.findNodeModule(
@@ -73,7 +74,7 @@ const setupPreset = (config: InitialConfig, configPreset: string) => {
   return Object.assign({}, preset, config);
 };
 
-const setupBabelJest = (config: InitialConfig) => {
+const setupBabelJest = (config: InitialOptions) => {
   let babelJest;
   const basedir = config.rootDir;
 
@@ -90,7 +91,8 @@ const setupBabelJest = (config: InitialConfig) => {
         {basedir},
       );
       if (
-        jsTransformer && jsTransformer.includes(NODE_MODULES + 'babel-jest')
+        jsTransformer &&
+        jsTransformer.includes(NODE_MODULES + 'babel-jest')
       ) {
         babelJest = jsTransformer;
       }
@@ -108,7 +110,7 @@ const setupBabelJest = (config: InitialConfig) => {
 };
 
 const normalizeCollectCoverageOnlyFrom = (
-  config: InitialConfig,
+  config: InitialOptions,
   key: string,
 ) => {
   return Object.keys(config[key]).reduce((normObj, filePath) => {
@@ -121,7 +123,7 @@ const normalizeCollectCoverageOnlyFrom = (
   }, Object.create(null));
 };
 
-const normalizeCollectCoverageFrom = (config: InitialConfig, key: string) => {
+const normalizeCollectCoverageFrom = (config: InitialOptions, key: string) => {
   let value;
   if (!config[key]) {
     value = [];
@@ -141,7 +143,7 @@ const normalizeCollectCoverageFrom = (config: InitialConfig, key: string) => {
 };
 
 const normalizeUnmockedModulePathPatterns = (
-  config: InitialConfig,
+  config: InitialOptions,
   key: string,
 ) => {
   // _replaceRootDirTags is specifically well-suited for substituting
@@ -155,7 +157,7 @@ const normalizeUnmockedModulePathPatterns = (
   );
 };
 
-const normalizePreprocessor = (config: InitialConfig) => {
+const normalizePreprocessor = (config: InitialOptions) => {
   /* eslint-disable max-len */
   if (config.scriptPreprocessor && config.transform) {
     throw createConfigError(
@@ -186,7 +188,7 @@ const normalizePreprocessor = (config: InitialConfig) => {
   delete config.preprocessorIgnorePatterns;
 };
 
-const normalizeMissingOptions = (config: InitialConfig) => {
+const normalizeMissingOptions = (config: InitialOptions) => {
   if (!config.name) {
     config.name = crypto.createHash('md5').update(config.rootDir).digest('hex');
   }
@@ -208,7 +210,7 @@ const normalizeMissingOptions = (config: InitialConfig) => {
   return config;
 };
 
-const normalizeRootDir = (config: InitialConfig) => {
+const normalizeRootDir = (config: InitialOptions) => {
   // Assert that there *is* a rootDir
   if (!config.hasOwnProperty('rootDir')) {
     throw createConfigError(
@@ -218,7 +220,7 @@ const normalizeRootDir = (config: InitialConfig) => {
   config.rootDir = path.normalize(config.rootDir);
 };
 
-const normalizeArgv = (config: InitialConfig, argv: Object) => {
+const normalizeArgv = (config: InitialOptions, argv: Object) => {
   if (argv.testRunner) {
     config.testRunner = argv.testRunner;
   }
@@ -230,7 +232,7 @@ const normalizeArgv = (config: InitialConfig, argv: Object) => {
   if (argv.collectCoverageOnlyFrom) {
     const collectCoverageOnlyFrom = Object.create(null);
     argv.collectCoverageOnlyFrom.forEach(
-      path => collectCoverageOnlyFrom[path] = true,
+      path => (collectCoverageOnlyFrom[path] = true),
     );
     config.collectCoverageOnlyFrom = collectCoverageOnlyFrom;
   }
@@ -240,7 +242,7 @@ const normalizeArgv = (config: InitialConfig, argv: Object) => {
   }
 };
 
-function normalize(config: InitialConfig, argv: Object = {}) {
+function normalize(config: InitialOptions, argv: Object = {}) {
   const {hasDeprecationWarnings} = validate(config, {
     comment: DOCUMENTATION_NOTE,
     deprecatedConfig: DEPRECATED_CONFIG,
@@ -345,7 +347,6 @@ function normalize(config: InitialConfig, argv: Object = {}) {
       case 'coverageThreshold':
       case 'globals':
       case 'logHeapUsage':
-      case 'logTransformErrors':
       case 'mapCoverage':
       case 'moduleDirectories':
       case 'moduleFileExtensions':
@@ -406,8 +407,8 @@ function normalize(config: InitialConfig, argv: Object = {}) {
   }
 
   return {
-    config: _replaceRootDirTags(newConfig.rootDir, newConfig),
     hasDeprecationWarnings,
+    options: _replaceRootDirTags(newConfig.rootDir, newConfig),
   };
 }
 

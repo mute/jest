@@ -77,41 +77,45 @@ describe('onRunComplete', () => {
       };
     });
 
-    testReporter = new CoverageReporter();
+    testReporter = new CoverageReporter({});
     testReporter.log = jest.fn();
   });
 
   it('getLastError() returns an error when threshold is not met', () => {
-    testReporter.onRunComplete(
-      new Set(),
-      {
-        collectCoverage: true,
-        coverageThreshold: {
-          global: {
-            statements: 100,
+    return testReporter
+      .onRunComplete(
+        new Set(),
+        {
+          collectCoverage: true,
+          coverageThreshold: {
+            global: {
+              statements: 100,
+            },
           },
         },
-      },
-      mockAggResults,
-    );
-
-    expect(testReporter.getLastError()).toBeTruthy();
+        mockAggResults,
+      )
+      .then(() => {
+        expect(testReporter.getLastError()).toBeTruthy();
+      });
   });
 
   it('getLastError() returns `undefined` when threshold is met', () => {
-    testReporter.onRunComplete(
-      new Set(),
-      {
-        collectCoverage: true,
-        coverageThreshold: {
-          global: {
-            statements: 50,
+    return testReporter
+      .onRunComplete(
+        new Set(),
+        {
+          collectCoverage: true,
+          coverageThreshold: {
+            global: {
+              statements: 50,
+            },
           },
         },
-      },
-      mockAggResults,
-    );
-
-    expect(testReporter.getLastError()).toBeUndefined();
+        mockAggResults,
+      )
+      .then(() => {
+        expect(testReporter.getLastError()).toBeUndefined();
+      });
   });
 });

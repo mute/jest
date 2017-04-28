@@ -10,17 +10,33 @@
 
 'use strict';
 
-import type {Config, Path} from 'types/Config';
+import type {GlobalConfig, ProjectConfig, Path} from 'types/Config';
 
 const IstanbulInstrument = require('istanbul-lib-instrument');
 
-const {transformSource, shouldInstrument} = require('jest-runtime');
+const {ScriptTransformer, shouldInstrument} = require('jest-runtime');
 
-module.exports = function(source: string, filename: Path, config: Config) {
-  if (shouldInstrument(filename, config)) {
+module.exports = function(
+  source: string,
+  filename: Path,
+  globalConfig: GlobalConfig,
+  config: ProjectConfig,
+) {
+  const coverageOptions = {
+    collectCoverage: globalConfig.collectCoverage,
+    collectCoverageFrom: globalConfig.collectCoverageFrom,
+    collectCoverageOnlyFrom: globalConfig.collectCoverageOnlyFrom,
+    mapCoverage: globalConfig.mapCoverage,
+  };
+  if (shouldInstrument(filename, coverageOptions, config)) {
     // Transform file without instrumentation first, to make sure produced
     // source code is ES6 (no flowtypes etc.) and can be instrumented
-    const transformResult = transformSource(filename, config, source, false);
+    const transformResult = new ScriptTransformer(config).transformSource(
+      filename,
+      source,
+      false,
+      globalConfig.mapCoverage,
+    );
     const instrumenter = IstanbulInstrument.createInstrumenter();
     instrumenter.instrumentSync(transformResult.code, filename);
     return {

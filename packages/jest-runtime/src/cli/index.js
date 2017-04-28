@@ -10,6 +10,8 @@
 
 'use strict';
 
+import type {EnvironmentClass} from 'types/Environment';
+
 const args = require('./args');
 const chalk = require('chalk');
 const os = require('os');
@@ -21,7 +23,7 @@ const {Console, setGlobal, validateCLIOptions} = require('jest-util');
 const readConfig = require('jest-config').readConfig;
 const Runtime = require('../');
 
-const VERSION = require('../../package.json').version;
+const VERSION = (require('../../package.json').version: string);
 
 function run(cliArgv?: Object, cliInfo?: Array<string>) {
   let argv;
@@ -57,7 +59,7 @@ function run(cliArgv?: Object, cliInfo?: Array<string>) {
     const info = cliInfo ? ', ' + cliInfo.join(', ') : '';
     console.log(`Using Jest Runtime v${VERSION}${info}`);
   }
-  readConfig(argv, root).then(({config}) => {
+  readConfig(argv, root).then(({config, globalConfig}) => {
     // Always disable automocking in scripts.
     config = Object.assign({}, config, {
       automock: false,
@@ -65,20 +67,21 @@ function run(cliArgv?: Object, cliInfo?: Array<string>) {
     });
     Runtime.createContext(config, {
       maxWorkers: os.cpus().length - 1,
+      watchman: globalConfig.watchman,
     })
       .then(hasteMap => {
         /* $FlowFixMe */
-        const TestEnvironment = require(config.testEnvironment);
-
-        const env = new TestEnvironment(config);
+        const Environment = (require(config.testEnvironment): EnvironmentClass);
+        const environment = new Environment(config);
         setGlobal(
-          env.global,
+          environment.global,
           'console',
           new Console(process.stdout, process.stderr),
         );
-        env.global.jestConfig = config;
+        environment.global.jestProjectConfig = config;
+        environment.global.jestGlobalConfig = globalConfig;
 
-        const runtime = new Runtime(config, env, hasteMap.resolver);
+        const runtime = new Runtime(config, environment, hasteMap.resolver);
         runtime.requireModule(testFilePath);
       })
       .catch(e => {

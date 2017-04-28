@@ -10,7 +10,7 @@
 
 'use strict';
 
-import type {DefaultConfig} from 'types/Config';
+import type {DefaultOptions} from 'types/Config';
 
 const constants = require('./constants');
 const os = require('os');
@@ -19,11 +19,22 @@ const {replacePathSepForRegex} = require('jest-regex-util');
 
 const NODE_MODULES_REGEXP = replacePathSepForRegex(constants.NODE_MODULES);
 
+const cacheDirectory = (() => {
+  const {getuid} = process;
+  if (getuid == null) {
+    return path.join(os.tmpdir(), 'jest');
+  }
+  // On some platforms tmpdir() is `/tmp`, causing conflicts between different
+  // users and permission issues. Adding an additional subdivision by UID can
+  // help.
+  return path.join(os.tmpdir(), 'jest_' + getuid.call(process).toString(36));
+})();
+
 module.exports = ({
   automock: false,
   bail: false,
   browser: false,
-  cacheDirectory: path.join(os.tmpdir(), 'jest'),
+  cacheDirectory,
   clearMocks: false,
   coveragePathIgnorePatterns: [NODE_MODULES_REGEXP],
   coverageReporters: ['json', 'text', 'lcov', 'clover'],
@@ -55,4 +66,4 @@ module.exports = ({
   useStderr: false,
   verbose: null,
   watch: false,
-}: DefaultConfig);
+}: DefaultOptions);

@@ -10,7 +10,8 @@
 
 'use strict';
 
-import type {Config, Path} from 'types/Config';
+import type {GlobalConfig, Path, ProjectConfig} from 'types/Config';
+import type {Plugin} from 'types/PrettyFormat';
 
 const {getState, setState} = require('jest-matchers');
 const {initializeSnapshotState, addSerializer} = require('jest-snapshot');
@@ -20,6 +21,13 @@ const {
   matcherHint,
   pluralize,
 } = require('jest-matcher-utils');
+
+export type SetupOptions = {|
+  config: ProjectConfig,
+  globalConfig: GlobalConfig,
+  localRequire: (moduleName: string) => Plugin,
+  testPath: Path,
+|};
 
 // Get suppressed errors form  jest-matchers that weren't throw during
 // test execution and add them to the test result, potentially failing
@@ -43,28 +51,53 @@ const addSuppressedErrors = result => {
 };
 
 function addAssertionErrors(result) {
-  const {assertionCalls, assertionsExpected} = getState();
+  const {
+    assertionCalls,
+    expectedAssertionsNumber,
+    isExpectingAssertions,
+  } = getState();
   setState({
     assertionCalls: 0,
-    assertionsExpected: null,
+    expectedAssertionsNumber: null,
   });
   if (
-    typeof assertionsExpected === 'number' &&
-    assertionCalls !== assertionsExpected
+    typeof expectedAssertionsNumber === 'number' &&
+    assertionCalls !== expectedAssertionsNumber
   ) {
-    const expected = EXPECTED_COLOR(pluralize('assertion', assertionsExpected));
+    const expected = EXPECTED_COLOR(
+      pluralize('assertion', expectedAssertionsNumber),
+    );
     const message = new Error(
-      matcherHint('.assertions', '', assertionsExpected, {
+      matcherHint('.assertions', '', String(expectedAssertionsNumber), {
         isDirectExpectCall: true,
       }) +
         '\n\n' +
         `Expected ${expected} to be called but only received ` +
-        `${RECEIVED_COLOR(pluralize('assertion call', assertionCalls))}.`,
+        RECEIVED_COLOR(pluralize('assertion call', assertionCalls || 0)) +
+        '.',
     ).stack;
     result.status = 'failed';
     result.failedExpectations.push({
       actual: assertionCalls,
-      expected: assertionsExpected,
+      expected: expectedAssertionsNumber,
+      message,
+      passed: false,
+    });
+  }
+  if (isExpectingAssertions && assertionCalls === 0) {
+    const expected = EXPECTED_COLOR('at least one assertion');
+    const received = RECEIVED_COLOR('received none');
+    const message = new Error(
+      matcherHint('.hasAssertions', '', '', {
+        isDirectExpectCall: true,
+      }) +
+        '\n\n' +
+        `Expected ${expected} to be called but ${received}.`,
+    ).stack;
+    result.status = 'failed';
+    result.failedExpectations.push({
+      actual: 'none',
+      expected: 'at least one',
       message,
       passed: false,
     });
@@ -98,25 +131,24 @@ const patchJasmine = () => {
   })(global.jasmine.Spec);
 };
 
-type Options = {
-  testPath: Path,
-  config: Config,
-};
-
-module.exports = ({testPath, config}: Options) => {
+module.exports = ({
+  config,
+  globalConfig,
+  localRequire,
+  testPath,
+}: SetupOptions) => {
   // Jest tests snapshotSerializers in order preceding built-in serializers.
   // Therefore, add in reverse because the last added is the first tested.
   config.snapshotSerializers.concat().reverse().forEach(path => {
-    // $FlowFixMe
-    addSerializer(require(path));
+    addSerializer(localRequire(path));
   });
   setState({testPath});
   patchJasmine();
   const snapshotState = initializeSnapshotState(
     testPath,
-    config.updateSnapshot,
+    globalConfig.updateSnapshot,
     '',
-    config.expand,
+    globalConfig.expand,
   );
   setState({snapshotState});
   // Return it back to the outer scope (test runner outside the VM).

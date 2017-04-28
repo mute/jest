@@ -30,7 +30,7 @@ type SearchSources = Array<{|
 const pluralizeFile = (total: number) => (total === 1 ? 'file' : 'files');
 
 const usage = () =>
-  `\n ${chalk.bold('Pattern Mode Usage')}\n` +
+  `\n${chalk.bold('Pattern Mode Usage')}\n` +
   ` ${chalk.dim('\u203A Press')} Esc ${chalk.dim('to exit pattern mode.')}\n` +
   ` ${chalk.dim('\u203A Press')} Enter ` +
   `${chalk.dim('to apply pattern to all filenames.')}\n` +
@@ -42,15 +42,23 @@ module.exports = class TestPathPatternPrompt {
   _pipe: stream$Writable | tty$WriteStream;
   _prompt: Prompt;
   _searchSources: SearchSources;
+  _currentUsageRows: number;
 
   constructor(pipe: stream$Writable | tty$WriteStream, prompt: Prompt) {
     this._pipe = pipe;
     this._prompt = prompt;
+    this._currentUsageRows = usageRows;
   }
 
-  run(onSuccess: Function, onCancel: Function) {
+  run(onSuccess: Function, onCancel: Function, options?: {header: string}) {
     this._pipe.write(ansiEscapes.cursorHide);
     this._pipe.write(ansiEscapes.clearScreen);
+    if (options && options.header) {
+      this._pipe.write(options.header + '\n');
+      this._currentUsageRows = usageRows + options.header.split('\n').length;
+    } else {
+      this._currentUsageRows = usageRows;
+    }
     this._pipe.write(usage());
     this._pipe.write(ansiEscapes.cursorShow);
 
@@ -127,7 +135,7 @@ module.exports = class TestPathPatternPrompt {
     }
 
     this._pipe.write(
-      ansiEscapes.cursorTo(stringLength(inputText), usageRows - 1),
+      ansiEscapes.cursorTo(stringLength(inputText), this._currentUsageRows - 1),
     );
     this._pipe.write(ansiEscapes.cursorRestorePosition);
   }
